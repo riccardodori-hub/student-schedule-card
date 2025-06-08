@@ -23,6 +23,15 @@ Supports subject management, color coding, room display, current time highlighti
 - 🛠️ Still editable in YAML if preferred
 
 ---
+## 📦 HACS Installation
+
+This card is available as a **custom repository** in [HACS](https://hacs.xyz):
+
+1. In HACS, go to **Frontend > ⋮ > Custom repositories**
+2. Add the repository URL:  `https://github.com/DomCim/student-schedule-card/`
+3. Set category to **Lovelace**
+4. Install `student-schedule-card`
+5. Add the resource automatically or manually (see below)
 
 ## 🚀 Installation
 
@@ -46,7 +55,7 @@ resources:
 
 ```yaml
 type: custom:student-schedule-card
-name: Jan Dill
+name: Jan
 description: Week A
 person_entity: person.jan
 default_placeholder: "--"
@@ -96,9 +105,12 @@ subjects:
     - subject: Deutsch
     - subject: Mathe
     - subject: Kunst
+      free: false
+      room: 1.OG 5
     - subject: HSU
     - subject: Deutsch
     - subject: HSU
+      free: true
     - free: true
     - free: true
     - free: true
@@ -163,6 +175,10 @@ If the card doesn't show up:
 ```yaml
 type: custom:student-schedule-card
 ```
+## 🐞 Bug Reports & Feature Requests
+
+Please open an issue here:
+👉 https://github.com/DomCim/student-schedule-card/issues
 
 ---
 

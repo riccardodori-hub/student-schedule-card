@@ -298,30 +298,54 @@
 
         static getStubConfig() {
             return {
-                name: "Stundenplan",
-                description: "Woche A",
-                default_placeholder: "frei",
+                name: "Student Schedule",
+                description: "Week A",
+                default_placeholder: "--",
                 show_highlight: true,
                 show_rooms: true,
                 shorten_room_names: true,
-                days: ["Mo", "Di", "Mi", "Do", "Fr"],
+                show_breaks: true,
+                break_label: "Break",
+                days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
                 times: ["8:00 - 8:45", "8:45 - 9:30"],
                 breaks: ["9:30 - 9:50"],
                 subjects: {
-                    1: ["De", "Ma"],
-                    2: ["Eng", "Ku"],
-                    3: ["frei", "frei"],
-                    4: ["frei", "frei"],
-                    5: ["frei", "frei"],
-                    6: ["frei", "frei"],
-                    7: ["frei", "frei"],
+                    1: [
+                        { subject: "Math", room: "101" },
+                        { subject: "English", room: "102" }
+                    ],
+                    2: [
+                        { subject: "Science", room: "201" },
+                        { subject: "Music", room: "203" }
+                    ],
+                    3: [
+                        { free: true },
+                        { free: true }
+                    ],
+                    4: [
+                        { free: true },
+                        { free: true }
+                    ],
+                    5: [
+                        { free: true },
+                        { free: true }
+                    ],
+                    6: [
+                        { free: true },
+                        { free: true }
+                    ],
+                    7: [
+                        { free: true },
+                        { free: true }
+                    ]
                 },
                 colors: {
-                    De: "#4caf50",
-                    Ma: "#2196f3",
-                    Eng: "#f44336",
-                    Ku: "#9c27b0",
-                },
+                    Math: "#2196f3",
+                    English: "#4caf50",
+                    Science: "#f44336",
+                    Music: "#9c27b0",
+                    FREE: "#cccccc"
+                }
             };
         }
     }
@@ -424,70 +448,91 @@
 
         _renderGeneralTab() {
             return html`
-        <ha-entity-picker
-          .hass=${this.hass}
-          .label="Child (person entity)"
-          .value=${this._data.person_entity || ""}
-          .includeDomains=${["person"]}
-          configValue="person_entity"
-          @value-changed=${(e) => this._valueChanged(e)}
-        ></ha-entity-picker>
+    <ha-entity-picker
+      .hass=${this.hass}
+      .label="Child (person entity)"
+      .value=${this._data.person_entity || ""}
+      .includeDomains=${["person"]}
+      configValue="person_entity"
+      @value-changed=${(e) => this._valueChanged(e)}
+    ></ha-entity-picker>
 
-        ${!this._data.person_entity
+    ${!this._data.person_entity
                     ? html`
-              <label class="editor-label">Name (optional):</label>
-              <ha-textfield
-                .value=${this._data.name || ""}
-                @input=${(e) => this._updateField("name", e.target.value)}
-              ></ha-textfield>
+          <label class="editor-label">Name (optional):</label>
+          <ha-textfield
+            .value=${this._data.name || ""}
+            @input=${(e) => this._updateField("name", e.target.value)}
+          ></ha-textfield>
 
-              <label class="editor-label">Icon (optional):</label>
-              <ha-icon-picker
-                .value=${this._data.icon || ""}
-                @value-changed=${(e) =>
-                            this._updateField("icon", e.detail.value)}
-              ></ha-icon-picker>
-            `
+          <label class="editor-label">Icon (optional):</label>
+          <ha-icon-picker
+            .value=${this._data.icon || ""}
+            @value-changed=${(e) => this._updateField("icon", e.detail.value)}
+          ></ha-icon-picker>
+        `
                     : ""}
 
-        <label class="editor-label">Description (optional):</label>
-        <ha-textfield
-          .value=${this._data.description || ""}
-          @input=${(e) => this._updateField("description", e.target.value)}
-        ></ha-textfield>
+    <label class="editor-label">Description (optional):</label>
+    <ha-textfield
+      .value=${this._data.description || ""}
+      @input=${(e) => this._updateField("description", e.target.value)}
+    ></ha-textfield>
 
-        <label class="editor-label">Show Breaks:</label>
+    <label class="editor-label">Show Breaks:</label>
+    <ha-switch
+      .checked=${this._data.show_breaks !== false}
+      @change=${(e) => this._updateField("show_breaks", e.target.checked)}
+    ></ha-switch>
+
+    ${this._data.show_breaks !== false
+                    ? html`
+          <label class="editor-label">Break label:</label>
+          <ha-textfield
+            .value=${this._data.break_label || ""}
+            @input=${(e) => this._updateField("break_label", e.target.value)}
+          ></ha-textfield>
+        `
+                    : ""}
+
+    <label class="editor-label">Default Placeholder:</label>
+    <ha-textfield
+      .value=${this._data.default_placeholder}
+      @input=${(e) => this._updateField("default_placeholder", e.target.value)}
+    ></ha-textfield>
+
+    <label class="editor-label">Weekdays (one per line):</label>
+    <ha-code-editor
+      mode="yaml"
+      .value=${(this._data.days || []).join("\n")}
+      @value-changed=${(e) => this._updateCode("days", e.detail.value)}
+    ></ha-code-editor>
+
+    <label class="editor-label">Display Options:</label>
+    <div class="switch-row">
+      <ha-formfield label="Highlight current time">
         <ha-switch
-          .checked=${this._data.show_breaks !== false}
-          @change=${(e) => this._updateField("show_breaks", e.target.checked)}
+          .checked=${this._data.show_highlight !== false}
+          @change=${(e) => this._updateField("show_highlight", e.target.checked)}
         ></ha-switch>
+      </ha-formfield>
 
-        ${this._data.show_breaks !== false
-                    ? html`
-              <label class="editor-label">Break label:</label>
-              <ha-textfield
-                .value=${this._data.break_label || ""}
-                @input=${(e) =>
-                            this._updateField("break_label", e.target.value)}
-              ></ha-textfield>
-            `
-                    : ""}
-        <label class="editor-label">Default Placeholder:</label>
-        <ha-textfield
-          .value=${this._data.default_placeholder}
-          @input=${(e) =>
-                    this._updateField("default_placeholder", e.target.value)}
-        ></ha-textfield>
+      <ha-formfield label="Show rooms">
+        <ha-switch
+          .checked=${this._data.show_rooms !== false}
+          @change=${(e) => this._updateField("show_rooms", e.target.checked)}
+        ></ha-switch>
+      </ha-formfield>
 
-        <label class="editor-label">Weekdays (one per line):</label>
-        <ha-code-editor
-          mode="yaml"
-          .value=${(this._data.days || []).join("\n")}
-          @value-changed=${(e) => this._updateCode("days", e.detail.value)}
-        ></ha-code-editor>
-      `;
+      <ha-formfield label="Shorten room names">
+        <ha-switch
+          .checked=${this._data.shorten_room_names !== false}
+          @change=${(e) => this._updateField("shorten_room_names", e.target.checked)}
+        ></ha-switch>
+      </ha-formfield>
+    </div>
+  `;
         }
-
         _renderTimesTab() {
             return html`
         <label class="editor-label">Times (one per line):</label>
@@ -837,6 +882,19 @@
           opacity: 0.7;
           font-style: italic;
         }
+        .switch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 0.5em;
+  margin-bottom: 1em;
+}
+.switch-row ha-formfield {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
       `;
         }
     }
