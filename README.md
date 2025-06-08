@@ -6,7 +6,7 @@ A flexible and fully UI-configurable student schedule card for [Home Assistant](
 
 Supports subject management, color coding, room display, current time highlighting, responsive layout, and more.
 
-![Preview 1](https://github.com/DomCim/student-schedule-card/blob/main/images/ColumnWidth1.png)
+![Preview 1](https://github.com/DomCim/student-schedule-card/blob/main/images/columnWidth1.png)
 ![Preview 2](https://github.com/DomCim/student-schedule-card/blob/main/images/ColumnWidth2.png)
 
 ---
