@@ -8,6 +8,7 @@
             return {
                 hass: {},
                 config: {},
+                _cellWidths: { type: Array },
             };
         }
 
@@ -17,8 +18,9 @@
             }
             this.config = {
                 show_highlight: true,
-                show_rooms: true,
-                shorten_room_names: true,
+                show_teachers: true,
+                shorten_teacher_names: true,
+                student_name: "", // Nuovo campo per nome diretto
                 ...structuredClone(config),
             };
         }
@@ -33,16 +35,16 @@
             const breaks = this.config.show_breaks ? this.config.breaks || [] : [];
             const breakLabel = this.config.break_label || "Pause";
             const containerWidth = this.offsetWidth;
-            const useShortDays = containerWidth < 700; // Schwelle anpassen
-            const useShortSubjects = containerWidth < 700; // Schwelle anpassen
+            const useShortDays = containerWidth < 700;
+            const useShortSubjects = containerWidth < 500; // Soglia ridotta per migliore responsività
             const defaultPlaceholder = this.config.default_placeholder;
             const showHighlight = this.config.show_highlight !== false;
-            const showRooms = this.config.show_rooms !== false;
-            const shortenRooms = useShortSubjects && this.config.shorten_room_names !== false;
+            const showTeachers = this.config.show_teachers !== false;
+            const shortenTeachers = useShortSubjects && this.config.shorten_teacher_names !== false;
             const days = useShortDays
                 ? this._shortenDays(this.config.days)
                 : this.config.days;
-            const useShortTime = days.length > 5 && containerWidth < 700; // Schwelle anpassen
+            const useShortTime = days.length > 5 && containerWidth < 700;
             const displayBreak = useShortDays
                 ? this._shortenSubject(breakLabel)
                 : breakLabel;
@@ -68,10 +70,10 @@
         >
           <table class="stundenplan">
             <tr>
-              <th></th>
-             ${days.map((day) => {
+              <th class="time-header"></th>
+             ${days.map((day, index) => {
                 const highlightClass = showHighlight && day === currentDayLabel ? "highlight" : "";
-                return html`<th id="tag-${day}" class="${highlightClass}">${day}</th>`;
+                return html`<th id="tag-${day}" class="day-header ${highlightClass}">${day}</th>`;
             })}
             </tr>
             ${allTimes.map((row) => {
@@ -87,10 +89,9 @@
                             ? "active-row"
                             : "";
 
-
                 return html`
                 <tr class="${rowClass}">
-                  <td>
+                  <td class="time-cell">
                     <b
                       >${useShortTime
                         ? row.time.split("-")[0].trim()
@@ -103,21 +104,21 @@
                                     ? "highlight-col-cell"
                                     : "";
                             if (row.type === "break")
-                                return html`<td class="pause ${tagClass}">
-                        ${displayBreak}
+                                return html`<td class="pause subject-cell ${tagClass}">
+                        <div class="cell-content">${displayBreak}</div>
                       </td>`;
 
                             const index = times.findIndex((t) => t.trim() === row.time);
                             const dayKey = (dayIdx + 1).toString();
                             const raw = subjects?.[dayKey]?.[index];
                             let subject = defaultPlaceholder;
-                            let room = null;
+                            let teacher = null;
                             let isFree = false;
 
                             if (typeof raw === "object" && raw !== null) {
                                 isFree = raw.free === true;
                                 subject = isFree ? defaultPlaceholder : raw.subject || defaultPlaceholder;
-                                room = isFree ? null : raw.room || null;
+                                teacher = isFree ? null : raw.teacher || null;
                             } else if (typeof raw === "string") {
                                 subject = raw;
                             }
@@ -126,21 +127,23 @@
                             const displayName = useShortSubjects
                                 ? this._shortenSubject(subject)
                                 : subject;
-                            const tooltip = room
-                                ? `${subject} – Raum ${room}`
+                            const tooltip = teacher
+                                ? `${subject} – Prof. ${teacher}`
                                 : subject;
+
+                            const textLength = this._calculateTextLength(displayName, teacher, showTeachers);
 
                             return html`
                       <td
-                        class="${tagClass}"
+                        class="subject-cell ${tagClass}"
                         style="background-color:${this._withAlpha(
                                 baseColor
-                            )}; text-align:center"
+                            )}; text-align:center; min-width: ${this._getMinCellWidth(textLength, containerWidth, days.length)}px;"
                       >
-                        <div title="${tooltip}">
-                          <div>${displayName}</div>
-                          ${room && showRooms
-                                    ? html`<div class="room">${shortenRooms ? this._shortenSubject(room) : room}</div>`
+                        <div class="cell-content" title="${tooltip}">
+                          <div class="subject-name">${displayName}</div>
+                          ${teacher && showTeachers
+                                    ? html`<div class="teacher">${shortenTeachers ? this._shortenSubject(teacher) : teacher}</div>`
                                     : ""}
                         </div>
                       </td>
@@ -153,6 +156,28 @@
         </ha-card>
       `;
         }
+
+        _calculateTextLength(subject, teacher, showTeachers) {
+            const subjectLength = subject ? subject.length : 0;
+            const teacherLength = showTeachers && teacher ? teacher.length : 0;
+            return Math.max(subjectLength, teacherLength);
+        }
+
+        _getMinCellWidth(textLength, containerWidth, dayCount) {
+            // Calcola la larghezza disponibile per le celle
+            const timeColumnWidth = 120; // Larghezza colonna orari
+            const padding = 40; // Padding totale
+            const availableWidth = (containerWidth - timeColumnWidth - padding) / dayCount;
+            
+            // Calcola la larghezza minima basata sulla lunghezza del testo
+            const baseWidth = 60; // Larghezza base
+            const charWidth = containerWidth < 600 ? 6 : 8; // Pixel per carattere, ridotto su schermi piccoli
+            const calculatedWidth = Math.max(baseWidth, textLength * charWidth + 20);
+            
+            // Usa il minimo tra larghezza calcolata e larghezza disponibile
+            return Math.min(calculatedWidth, Math.max(availableWidth, 80));
+        }
+
         _shortenDays(days) {
             return days.map((d) =>
                 d.length > 3
@@ -180,8 +205,9 @@
             return h * 60 + m;
         }
         _renderHeader() {
-            const { person_entity, name, icon, description } = this.config;
+            const { person_entity, student_name, name, icon, description } = this.config;
 
+            // Priorità: person_entity > student_name > name
             if (person_entity && this.hass?.states[person_entity]) {
                 const entity = this.hass.states[person_entity];
                 const entityName = entity.attributes.friendly_name || person_entity;
@@ -189,48 +215,53 @@
                 const avatar = entity.attributes.entity_picture;
 
                 return html`
-          <div style="text-align: center;">
-            <span
-              style="display: flex; align-items: center; justify-content: center; gap: 8px;"
-            >
+          <div class="header-content">
+            <span class="header-title">
               ${avatar
                         ? html`<img
                     src="${avatar}"
-                    style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;"
+                    class="avatar"
                     alt="avatar"
                   />`
                         : html`<ha-icon icon="${entityIcon}"></ha-icon>`}
               <span>${entityName}</span>
             </span>
             ${description
-                        ? html`<div
-                  style="margin-top: 4px; font-size: 0.85em; color: var(--secondary-text-color);"
-                >
-                  ${description}
-                </div>`
+                        ? html`<div class="header-description">${description}</div>`
                         : ""}
           </div>
         `;
             }
 
+            // Se c'è student_name, usalo
+            if (student_name?.trim()) {
+                return html`
+          <div class="header-content">
+            <span class="header-title">
+              ${icon ? html`<ha-icon icon="${icon}"></ha-icon>` : html`<ha-icon icon="mdi:account-school"></ha-icon>`}
+              <span>${student_name}</span>
+            </span>
+            ${description
+                        ? html`<div class="header-description">${description}</div>`
+                        : ""}
+          </div>
+        `;
+            }
+
+            // Fallback al name generico
             return html`
-        <div style="text-align: center;">
-          <span
-            style="display: flex; align-items: center; justify-content: center; gap: 8px;"
-          >
+        <div class="header-content">
+          <span class="header-title">
             ${icon ? html`<ha-icon icon="${icon}"></ha-icon>` : ""}
             <span>${name || "Student Schedule"}</span>
           </span>
           ${description
-                    ? html`<div
-                style="margin-top: 4px; font-size: 0.85em; color: var(--secondary-text-color);"
-              >
-                ${description}
-              </div>`
+                    ? html`<div class="header-description">${description}</div>`
                     : ""}
         </div>
       `;
         }
+
         _withAlpha(hex, alpha = 0.85) {
             if (hex.startsWith("#")) {
                 if (hex.length === 4)
@@ -239,32 +270,70 @@
                 const r = (bigint >> 16) & 255;
                 const g = (bigint >> 8) & 255;
                 const b = bigint & 255;
-                return `rgba(${r},${g},${b},${alpha})`;
+                return `rgba(${r}, ${g}, ${b}, ${alpha})`;
             }
             return hex;
         }
 
         static get styles() {
             return css`
-        :host {
-          display: block;
+        ha-card {
           width: 100%;
+          overflow-x: auto;
         }
         .stundenplan {
-          border-collapse: collapse;
           width: 100%;
-          font-family: sans-serif;
+          min-width: 100%;
+          border-collapse: collapse;
+          table-layout: auto;
         }
-        .stundenplan th,
-        .stundenplan td {
-          border: 1px solid var(--divider-color, #ccc);
-          padding: 8px;
+        .time-cell {
+          font-size: 0.8em;
+          padding: 8px 4px;
+          background: var(--card-background-color);
+          border: 1px solid var(--divider-color);
+          text-align: center;
+          white-space: nowrap;
+          min-width: 80px;
+          max-width: 120px;
         }
-
-        .stundenplan td:first-child {
+        .subject-cell {
+          padding: 6px 4px;
+          border: 1px solid var(--divider-color);
+          text-align: center;
+          vertical-align: middle;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          hyphens: auto;
+        }
+        .cell-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          min-height: 40px;
+        }
+        .subject-name {
+          font-size: 0.85em;
+          font-weight: 600;
+          line-height: 1.2;
+          margin-bottom: 2px;
+          word-break: break-word;
+        }
+        .day-header {
+          padding: 8px 4px;
+          text-align: center;
           font-weight: bold;
           background: rgba(0, 0, 0, 0.05);
           white-space: nowrap;
+        }
+        .teacher {
+          font-size: 0.7em;
+          color: var(--secondary-text-color, #666);
+          margin-top: 2px;
+          line-height: 1.1;
+          word-break: break-word;
         }
         .room {
           font-size: 0.75em;
@@ -302,8 +371,8 @@
                 description: "Week A",
                 default_placeholder: "--",
                 show_highlight: true,
-                show_rooms: true,
-                shorten_room_names: true,
+                show_teachers: true,
+                shorten_teacher_names: true,
                 show_breaks: true,
                 break_label: "Break",
                 days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
@@ -311,12 +380,12 @@
                 breaks: ["9:30 - 9:50"],
                 subjects: {
                     1: [
-                        { subject: "Math", room: "101" },
-                        { subject: "English", room: "102" }
+                        { subject: "Math", teacher: "Smith" },
+                        { subject: "English", teacher: "Johnson" }
                     ],
                     2: [
-                        { subject: "Science", room: "201" },
-                        { subject: "Music", room: "203" }
+                        { subject: "Science", teacher: "Brown" },
+                        { subject: "Music", teacher: "Davis" }
                     ],
                     3: [
                         { free: true },
@@ -656,12 +725,12 @@
                     ${Object.keys(dayIndices).map((dayIndex) => {
                         const raw = subjects?.[dayIndex]?.[rowIndex];
                         let subject = "";
-                        let room = "";
+                        let teacher = "";
                         let entry = {};
 
                         if (typeof raw === "object" && raw !== null) {
                             subject = raw.subject || "";
-                            room = raw.room || "";
+                            teacher = raw.teacher || "";
                             entry = raw;
                         } else if (typeof raw === "string") {
                             subject = raw;
@@ -684,17 +753,18 @@
                         />
                         <input
                           type="text"
-                          placeholder="Room"
-                          .value=${room}
-                          class="input-room"
+                          placeholder="Teacher"
+                          .value=${teacher}
+                          class="input-teacher"
                           @input=${(e) =>
                                 this._updateSubjectField(
                                     dayIndex,
                                     rowIndex,
-                                    "room",
+                                    "teacher",
                                     e.target.value
                                 )}
                         />
+
                         <label
                           style="font-size: 0.7em; display: flex; align-items: center; gap: 4px;"
                         >
@@ -737,16 +807,15 @@
                 entry.free = value === true;
             } else {
                 entry[field] = value;
-
-                // Automatische free-Erkennung, falls Subject und Room leer
-                // const isSubjectEmpty = !entry.subject || entry.subject.trim() === "";
-                // const isRoomEmpty = !entry.room || entry.room.trim() === "";
-                // entry.free = isSubjectEmpty && isRoomEmpty;
             }
 
             if (field === "subject" && value.trim() === "") {
                 entry.subject = null;
             }
+            if (field === "teacher" && value.trim() === "") {
+                entry.teacher = null;
+            }
+
             // Aufräumen
             if (!entry.free) delete entry.free;
 
@@ -826,8 +895,8 @@
                     { name: "break_label", selector: { text: {} } },
                     { name: "default_placeholder", selector: { text: {} } },
                     { name: "show_highlight", selector: { boolean: {} } },
-                    { name: "show_rooms", selector: { boolean: {} } },
-                    { name: "shorten_room_names", selector: { boolean: {} } },
+                    { name: "show_teachers", selector: { boolean: {} } },
+                    { name: "shorten_teacher_names", selector: { boolean: {} } },
                 ],
                 times: [
                     { name: "times", selector: { text: { multiline: true } } },
@@ -868,7 +937,7 @@
           color: var(--secondary-text-color);
         }
         .input-subject,
-        .input-room {
+        .input-teacher {
           width: 100%;
           box-sizing: border-box;
           background: var(--card-background-color);
@@ -878,7 +947,7 @@
           margin-bottom: 2px;
           font-size: 0.8em;
         }
-        .input-room {
+        .input-teacher {
           opacity: 0.7;
           font-style: italic;
         }
@@ -919,7 +988,7 @@
 );
 
 console.info(
-    `%c 📘 STUDENT-SCHEDULE-CARD %c v1.0.48 `,
+    `%c 📘 STUDENT-SCHEDULE-CARD %c v1.1.00 `,
     "background: #3f51b5; color: white; font-weight: bold; padding: 2px 8px; border-radius: 4px;",
     "background: #009688; color: white; font-weight: bold; padding: 2px 6px; border-radius: 4px;"
 );
