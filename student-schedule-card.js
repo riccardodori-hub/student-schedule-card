@@ -1192,7 +1192,7 @@
 );
 
 console.info(
-    `%c 📘 STUDENT-SCHEDULE-CARD %c v1.2.00 `,
+    `%c 📘 STUDENT-SCHEDULE-CARD %c v1.2.01 `,
     "background: #3f51b5; color: white; font-weight: bold; padding: 2px 8px; border-radius: 4px;",
     "background: #009688; color: white; font-weight: bold; padding: 2px 6px; border-radius: 4px;"
 );

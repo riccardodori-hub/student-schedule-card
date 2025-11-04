@@ -43,7 +43,7 @@ This card is available as a **custom repository** in [HACS](https://hacs.xyz):
 
 ```yaml
 resources:
-  - url: /local/student-schedule-card.js?v=1.0.0
+  - url: /local/student-schedule-card.js?v=1.2.01
     type: module
 ```
 
