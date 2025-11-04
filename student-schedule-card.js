@@ -20,8 +20,15 @@
                 show_highlight: true,
                 show_teachers: true,
                 shorten_teacher_names: true,
-                student_name: "", // Nuovo campo per nome diretto
-                ...structuredClone(config),
+        student_name: "", // Nuovo campo per nome diretto
+        // notifiche (opzionali)
+        notify_service: null, // es. "notify.mobile_app_myphone"
+        notify_default_lead: 10, // minuti prima dell'evento
+        // pranzo
+        lunch: null, // { start: "12:30", end: "13:15", label: "Lunch", notify_before: 15 }
+  // eventi extra (array di oggetti)
+  extra_events: [], // [{ name, days: [1,3], start, end, notify_before, notify_service }]
+        ...structuredClone(config),
             };
         }
 
@@ -32,8 +39,14 @@
         render() {
             const times = this.config.times;
             const subjects = this.config.subjects;
-            const breaks = this.config.show_breaks ? this.config.breaks || [] : [];
-            const breakLabel = this.config.break_label || "Pause";
+      const breaks = this.config.show_breaks ? (this.config.breaks || []) : [];
+      const breakLabel = this.config.break_label || "Pause";
+      // includi il pranzo come pausa se configurato
+      if (this.config.lunch && this.config.lunch.start && this.config.lunch.end) {
+        const lunchLabel = this.config.lunch.label || "Lunch";
+        // aggiungiamo al vettore delle pause per la renderizzazione a tabella
+        breaks.push(`${this.config.lunch.start} - ${this.config.lunch.end}`);
+      }
             const containerWidth = this.offsetWidth;
             const useShortDays = containerWidth < 700;
             const useShortSubjects = containerWidth < 500; // Soglia ridotta per migliore responsività
@@ -48,14 +61,20 @@
             const displayBreak = useShortDays
                 ? this._shortenSubject(breakLabel)
                 : breakLabel;
-            const allTimes = [
-                ...times.map((t) => ({ type: "lesson", time: t })),
-                ...breaks.map((b) => ({ type: "break", time: b })),
-            ].sort(
-                (a, b) =>
-                    this._toMinutes(a.time.split("-")[0]) -
-                    this._toMinutes(b.time.split("-")[0])
-            );
+      const allTimes = [
+        ...times.map((t) => ({ type: "lesson", time: t })),
+        ...breaks.map((b) => ({ type: "break", time: b })),
+      ];
+
+      // Aggiungi eventi extra (pomeridiani) come righe separate
+      const extraEvents = Array.isArray(this.config.extra_events)
+        ? this.config.extra_events.map((ev) => ({ type: "extra", time: `${ev.start} - ${ev.end}`, event: ev }))
+        : [];
+
+      // unisci e riordina includendo extraEvents
+      const combinedRows = [...allTimes, ...extraEvents].sort(
+        (a, b) => this._toMinutes(a.time.split("-")[0]) - this._toMinutes(b.time.split("-")[0])
+      );
 
             const now = new Date();
             const currentMinutes = now.getHours() * 60 + now.getMinutes();
@@ -76,18 +95,18 @@
                 return html`<th id="tag-${day}" class="day-header ${highlightClass}">${day}</th>`;
             })}
             </tr>
-            ${allTimes.map((row) => {
+      ${combinedRows.map((row) => {
                 const [start, end] = row.time.split("-").map((t) => t.trim());
                 const startMin = this._toMinutes(start);
                 const endMin = this._toMinutes(end);
                 const isNow =
                     currentMinutes >= startMin && currentMinutes < endMin;
-                const rowClass =
-                    row.type === "break"
-                        ? "pause"
-                        : showHighlight && isNow
-                            ? "active-row"
-                            : "";
+        const rowClass =
+          row.type === "break"
+            ? "pause"
+            : showHighlight && isNow
+              ? "active-row"
+              : "";
 
                 return html`
                 <tr class="${rowClass}">
@@ -107,6 +126,27 @@
                                 return html`<td class="pause subject-cell ${tagClass}">
                         <div class="cell-content">${displayBreak}</div>
                       </td>`;
+
+                            if (row.type === "extra") {
+                                // mostra evento extra solo se configurato per questo giorno
+                                const ev = row.event || {};
+                                const daysForEv = Array.isArray(ev.days) ? ev.days.map(String) : [];
+                                const dayKey = (dayIdx + 1).toString();
+                                if (!daysForEv.includes(dayKey)) {
+                                    return html`<td class="subject-cell ${tagClass}"><div class="cell-content"></div></td>`;
+                                }
+
+                                const evName = ev.name || defaultPlaceholder;
+                                const evTooltip = evName + (ev.location ? ` – ${ev.location}` : "");
+                                const evColor = this.config.colors?.[evName] || "#ffd54f";
+
+                                return html`<td class="subject-cell extra ${tagClass}" style="background-color: ${this._withAlpha(evColor, 0.9)};">
+                                  <div class="cell-content" title="${evTooltip}">
+                                    <div class="subject-name">${evName}</div>
+                                    ${ev.start ? html`<div class="teacher">${ev.start} - ${ev.end}</div>` : ""}
+                                  </div>
+                                </td>`;
+                            }
 
                             const index = times.findIndex((t) => t.trim() === row.time);
                             const dayKey = (dayIdx + 1).toString();
@@ -193,17 +233,100 @@
             super.connectedCallback();
             this._resizeObserver = new ResizeObserver(() => this.requestUpdate());
             this._resizeObserver.observe(this);
+      // prepara array per timers notifiche
+      this._notificationTimers = [];
+      // programma notifiche per gli eventi configurati
+      this._scheduleNotifications();
         }
 
         disconnectedCallback() {
-            this._resizeObserver.disconnect();
+      this._resizeObserver.disconnect();
+      this._clearNotificationTimers();
             super.disconnectedCallback();
         }
+
+    _clearNotificationTimers() {
+      if (!this._notificationTimers) return;
+      for (const t of this._notificationTimers) {
+        clearTimeout(t);
+      }
+      this._notificationTimers = [];
+    }
+
+    _scheduleNotifications() {
+      // Non possiamo schedulare senza hass
+      if (!this.hass) return;
+      this._clearNotificationTimers();
+
+      const now = new Date();
+      const todayIndex = ((now.getDay() + 7 - 1) % 7) + 1; // converti a 1=Mon..7=Sun
+
+      const scheduleFor = (ev) => {
+        const start = ev.start;
+        if (!start) return null;
+        const [h, m] = start.split(":").map((n) => parseInt(n, 10));
+        const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+        return dt;
+      };
+
+      const pushNotify = (service, title, message) => {
+        try {
+          if (!service) return;
+          const parts = service.split(".");
+          const domain = parts.shift();
+          const svc = parts.join("_") || parts.join("");
+          // callService expects domain and service
+          // service id in HA is like notify.mobile_app_... -> domain notify service mobile_app_...
+          const serviceName = service.startsWith("notify.") ? service.replace("notify.", "") : service;
+          this.hass.callService("notify", serviceName, { title, message });
+        } catch (e) {
+          console.warn("Failed to call notify service", e);
+        }
+      };
+
+      // Events: extra_events and lunch
+      const list = [];
+      if (Array.isArray(this.config.extra_events)) {
+        for (const ev of this.config.extra_events) list.push({ type: 'extra', ev });
+      }
+      if (this.config.lunch && this.config.lunch.start && this.config.lunch.end) {
+        list.push({ type: 'lunch', ev: this.config.lunch });
+      }
+
+      for (const item of list) {
+        const ev = item.ev;
+        // giorni in cui avviene: array di numeri 1..7 o null=qualsiasi
+        const days = Array.isArray(ev.days) ? ev.days.map((d) => parseInt(d, 10)) : null;
+        // se non è per oggi saltiamo (scheduliamo solo per la giornata corrente per semplicità)
+        if (days && !days.includes(todayIndex)) continue;
+
+        const dt = scheduleFor(ev);
+        if (!dt) continue;
+        // lead time
+        const lead = typeof ev.notify_before === 'number' ? ev.notify_before : this.config.notify_default_lead || 0;
+        const notifyAt = new Date(dt.getTime() - lead * 60 * 1000);
+        const ms = notifyAt.getTime() - now.getTime();
+        if (ms <= 0) continue; // già passato
+
+        const service = ev.notify_service || this.config.notify_service;
+        const title = ev.name || (item.type === 'lunch' ? (ev.label || 'Lunch') : 'Event');
+        const message = `Start: ${ev.start} - ${ev.end}`;
+
+        const t = setTimeout(() => pushNotify(service, title, message), ms);
+        this._notificationTimers.push(t);
+      }
+    }
 
         _toMinutes(t) {
             const [h, m] = t.split(":").map(Number);
             return h * 60 + m;
         }
+    updated(changedProps) {
+      if (changedProps.has && changedProps.has('config')) {
+        // quando la config cambia, ri-programmiamo le notifiche
+        this._scheduleNotifications();
+      }
+    }
         _renderHeader() {
             const { person_entity, student_name, name, icon, description } = this.config;
 
@@ -415,7 +538,17 @@
                     Music: "#9c27b0",
                     FREE: "#cccccc"
                 }
-            };
+        ,
+        // esempio pranzo
+        lunch: { start: "12:30", end: "13:15", label: "Lunch", notify_before: 15 },
+        // esempio eventi extra
+        extra_events: [
+          { name: "Piano", days: [2,4], start: "15:00", end: "16:00", notify_before: 30, notify_service: null },
+          { name: "Soccer", days: [3], start: "17:00", end: "18:30", notify_before: 60 }
+        ],
+        notify_service: null,
+        notify_default_lead: 10
+      };
         }
     }
 
@@ -498,7 +631,7 @@
         }
 
         render() {
-            const tabs = ["General", "Times", "Colors", "Subjects"];
+            const tabs = ["General", "Times", "Colors", "Subjects", "Extras"];
             return html`
         <mwc-tab-bar
           .activeIndex=${this._tabIndex}
@@ -511,8 +644,79 @@
           ${this._tabIndex === 1 ? this._renderTimesTab() : ""}
           ${this._tabIndex === 2 ? this._renderColorsTab() : ""}
           ${this._tabIndex === 3 ? this._renderSubjectsTab() : ""}
+          ${this._tabIndex === 4 ? this._renderExtrasTab() : ""}
         </div>
       `;
+        }
+
+        _renderExtrasTab() {
+            const lunch = this._data.lunch || {};
+            return html`
+    <label class="editor-label">Notify service (optional, ex: notify.mobile_app_phone):</label>
+    <ha-textfield
+      .value=${this._data.notify_service || ""}
+      @input=${(e) => this._updateField("notify_service", e.target.value)}
+    ></ha-textfield>
+
+    <label class="editor-label">Default notify lead (minutes):</label>
+    <ha-textfield
+      .value=${this._data.notify_default_lead || 0}
+      @input=${(e) => this._updateField("notify_default_lead", Number(e.target.value))}
+    ></ha-textfield>
+
+    <hr />
+    <label class="editor-label">Lunch (optional)</label>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <ha-textfield
+        .placeholder=${"start (HH:MM)"}
+        .value=${lunch.start || ""}
+        @input=${(e) => this._updateLunchField("start", e.target.value)}
+      ></ha-textfield>
+      <ha-textfield
+        .placeholder=${"end (HH:MM)"}
+        .value=${lunch.end || ""}
+        @input=${(e) => this._updateLunchField("end", e.target.value)}
+      ></ha-textfield>
+      <ha-textfield
+        .placeholder=${"label"}
+        .value=${lunch.label || "Lunch"}
+        @input=${(e) => this._updateLunchField("label", e.target.value)}
+      ></ha-textfield>
+      <ha-textfield
+        .placeholder=${"notify_before (min)"}
+        .value=${lunch.notify_before || ""}
+        @input=${(e) => this._updateLunchField("notify_before", Number(e.target.value))}
+      ></ha-textfield>
+    </div>
+
+    <label class="editor-label">Extra events (JSON array)</label>
+    <ha-code-editor
+      mode="yaml"
+      .value=${JSON.stringify(this._data.extra_events || [], null, 2)}
+      @value-changed=${(e) => this._updateExtrasJSON(e.detail.value)}
+    ></ha-code-editor>
+  `;
+        }
+
+        _updateLunchField(key, value) {
+            const lunch = { ...(this._data.lunch || {}) };
+            lunch[key] = value;
+            this._data = { ...this._data, lunch };
+            this._emit();
+        }
+
+        _updateExtrasJSON(value) {
+            try {
+                const parsed = JSON.parse(value);
+                if (Array.isArray(parsed)) {
+                    this._data = { ...this._data, extra_events: parsed };
+                    this._subjects = this._extractSubjects(this._data.subjects || {});
+                    this._emit();
+                }
+            } catch (e) {
+                // non bloccare l'editor se JSON non valido
+                console.warn('Invalid extras JSON', e);
+            }
         }
 
         _renderGeneralTab() {
@@ -988,7 +1192,7 @@
 );
 
 console.info(
-    `%c 📘 STUDENT-SCHEDULE-CARD %c v1.1.00 `,
+    `%c 📘 STUDENT-SCHEDULE-CARD %c v1.2.00 `,
     "background: #3f51b5; color: white; font-weight: bold; padding: 2px 8px; border-radius: 4px;",
     "background: #009688; color: white; font-weight: bold; padding: 2px 6px; border-radius: 4px;"
 );

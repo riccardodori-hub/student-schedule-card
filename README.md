@@ -125,7 +125,23 @@ subjects:
     - free: true
     - free: true
 ```
-
+---
+features
+Esempio di configurazione (YAML / Lovelace config):
+lunch:
+start: "12:30"
+end: "13:15"
+label: "Pranzo"
+notify_before: 15
+extra_events: (array di oggetti)
+name: "Piano"
+days: [2,4] # 1 = Monday ... 7 = Sunday
+start: "15:00"
+end: "16:00"
+notify_before: 30
+notify_service: "notify.mobile_app_ricca_phone" # opzionale, altrimenti usa notify_service globale
+notify_service: "notify.mobile_app_ricca_phone"
+notify_default_lead: 10
 ---
 
 ## ⚙️ Options
