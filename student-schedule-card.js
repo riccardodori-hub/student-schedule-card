@@ -20,17 +20,17 @@
                 show_highlight: true,
                 show_teachers: true,
                 shorten_teacher_names: true,
-        student_name: "", // Nuovo campo per nome diretto
-        // notifiche (opzionali)
-        notify_service: null, // es. "notify.mobile_app_myphone"
-        notify_default_lead: 10, // minuti prima dell'evento
-        // pranzo
-        lunch: null, // { start: "12:30", end: "13:15", label: "Lunch", notify_before: 15 }
-  // eventi extra (array di oggetti)
-  extra_events: [], // [{ name, days: [1,3], start, end, notify_before, notify_service }]
-        ...structuredClone(config),
-            };
-        }
+                student_name: "", // Nuovo campo per nome diretto
+                // notifiche (opzionali)
+                notify_service: null, // es. "notify.mobile_app_myphone"
+                notify_default_lead: 10, // minuti prima dell'evento
+                // pranzo
+                lunch: null, // { start: "12:30", end: "13:15", label: "Lunch", notify_before: 15 }
+                // eventi extra (array di oggetti)
+                extra_events: [], // [{ name, days: [1,3], start, end, notify_before, notify_service }]
+                      ...structuredClone(config),
+                          };
+                      }
 
         getCardSize() {
             return (this.config.times?.length || 0) + 1;
