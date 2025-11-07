@@ -39,14 +39,14 @@
         render() {
             const times = this.config.times;
             const subjects = this.config.subjects;
-      const breaks = this.config.show_breaks ? (this.config.breaks || []) : [];
-      const breakLabel = this.config.break_label || "Pause";
-      // includi il pranzo come pausa se configurato
-      if (this.config.lunch && this.config.lunch.start && this.config.lunch.end) {
-        const lunchLabel = this.config.lunch.label || "Lunch";
-        // aggiungiamo al vettore delle pause per la renderizzazione a tabella
-        breaks.push(`${this.config.lunch.start} - ${this.config.lunch.end}`);
-      }
+            // Fix: non modificare breaks originale, crea una copia locale
+            let breaks = this.config.show_breaks ? [...(this.config.breaks || [])] : [];
+            const breakLabel = this.config.break_label || "Pause";
+            // includi il pranzo come pausa se configurato
+            if (this.config.lunch && this.config.lunch.start && this.config.lunch.end) {
+                const lunchLabel = this.config.lunch.label || "Lunch";
+                breaks.push(`${this.config.lunch.start} - ${this.config.lunch.end}`);
+            }
             const containerWidth = this.offsetWidth;
             const useShortDays = containerWidth < 700;
             const useShortSubjects = containerWidth < 500; // Soglia ridotta per migliore responsività
